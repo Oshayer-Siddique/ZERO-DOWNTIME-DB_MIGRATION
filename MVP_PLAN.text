@@ -1,0 +1,483 @@
+1. What is this project actually doing? (Simple explanation)
+
+Imagine you have an application running in production.
+
+Current database:
+
+users table
+
+id | full_name
+--------------
+1  | John Smith
+2  | Alice Brown
+
+Your developers want to improve the design:
+
+New database:
+
+users table
+
+id | first_name | last_name
+---------------------------
+1  | John       | Smith
+2  | Alice      | Brown
+
+A normal developer might do:
+
+ALTER TABLE users DROP COLUMN full_name;
+ALTER TABLE users ADD first_name;
+ALTER TABLE users ADD last_name;
+
+Problem:
+
+During deployment:
+
+Old Application
+        |
+        |
+        v
+ expects full_name
+
+
+Database migration happens
+
+
+Database
+        |
+        |
+        v
+ full_name removed
+
+
+Old application crashes
+
+Users see:
+
+500 Internal Server Error
+
+Your project solves this using:
+
+Expand → Migrate → Contract pattern
+Phase 1: Expand
+
+Add new structure but keep old one.
+
+Database:
+
+users
+
+id | full_name | first_name | last_name
+---------------------------------------
+1  | John Smith| NULL       | NULL
+
+Old app works.
+
+New app can start using new columns.
+
+Phase 2: Dual Write + Backfill
+
+Synchronize data.
+
+Example:
+
+New user created:
+
+first_name = John
+last_name = Smith
+
+Trigger copies:
+
+full_name = John Smith
+
+Now both versions work.
+
+Phase 3: Contract
+
+After old application is completely removed:
+
+Remove old column:
+
+users
+
+id | first_name | last_name
+---------------------------
+1  | John       | Smith
+
+No downtime.
+
+MVP Goal
+
+Your MVP should demonstrate:
+
+Developer commits migration
+          |
+          v
+GitHub Actions starts
+          |
+          v
+Checks SQL safety
+          |
+          v
+Creates temporary PostgreSQL
+          |
+          v
+Runs migration
+          |
+          v
+Runs old + new API tests
+          |
+          v
+Migration approved
+MVP Architecture
+
+Keep it simple:
+
+                 GitHub Repository
+
+                        |
+                        |
+                 GitHub Actions
+
+                        |
+        --------------------------------
+        |                              |
+ SQL Migration Linter          Integration Tests
+
+
+                        |
+                        |
+
+                Docker Compose
+
+        -------------------------------
+        |                             |
+
+ PostgreSQL Database            FastAPI Service
+
+
+                         |
+                  Legacy API v1
+                  Modern API v2
+
+MVP Technology Stack
+
+Use:
+
+Database
+
+✅ PostgreSQL 15
+
+Running:
+
+docker-compose.yml
+Backend API
+
+Use:
+
+Option 1 (recommended):
+
+Python FastAPI
+
+Why?
+
+Simple
+DevOps people understand it
+Easy testing
+
+Structure:
+
+api/
+
+├── v1/
+│    └── users.py
+│
+├── v2/
+│    └── users.py
+│
+└── database.py
+Migration Tool
+
+Use:
+
+Alembic
+
+Reason:
+
+Popular in Python ecosystem
+Real production usage
+Easy CV explanation
+
+Example:
+
+migrations/
+
+001_create_users.py
+
+002_expand_name_fields.py
+
+003_contract_remove_full_name.py
+CI/CD
+
+Use:
+
+GitHub Actions
+
+Pipeline:
+
+.github/
+
+ workflows/
+
+   migration-test.yml
+
+MVP Features (ONLY THESE)
+Feature 1 — PostgreSQL Docker Environment
+
+Required.
+
+Create:
+
+docker-compose.yml
+
+It should start:
+
+postgres container
+
+Example:
+
+docker compose up
+
+Database becomes available.
+
+Feature 2 — Initial Database Schema
+
+Create:
+
+users table
+
+id
+full_name
+created_at
+
+
+Application Version 1 works.
+
+Example API:
+
+POST /v1/users
+
+{
+"name":"John Smith"
+}
+
+GET /v1/users
+
+returns:
+
+John Smith
+Feature 3 — Expand Migration
+
+Create migration:
+
+add_first_last_name.sql
+
+Result:
+
+Before:
+
+id
+full_name
+
+
+After:
+
+id
+full_name
+first_name
+last_name
+
+
+Important:
+
+Do NOT delete anything.
+
+Feature 4 — Backfill Data
+
+Migration script:
+
+Existing:
+
+full_name="John Smith"
+
+becomes:
+
+first_name="John"
+last_name="Smith"
+
+Example:
+
+UPDATE users
+SET first_name='John',
+last_name='Smith'
+Feature 5 — Dual Version API
+
+Create two APIs.
+
+Version 1
+
+Old application:
+
+GET /v1/users
+
+returns:
+
+{
+"name":"John Smith"
+}
+
+Uses:
+
+full_name
+Version 2
+
+New application:
+
+GET /v2/users
+
+returns:
+
+{
+"first_name":"John",
+"last_name":"Smith"
+}
+
+Uses:
+
+first_name
+last_name
+Feature 6 — Synchronization
+
+Choose ONE:
+
+Option A (better for CV)
+
+Database trigger
+
+Example:
+
+When:
+
+first_name changes
+
+automatically update:
+
+full_name
+
+This demonstrates database engineering.
+
+OR
+
+Option B
+
+Application dual write.
+
+Simpler:
+
+API writes:
+
+first_name
+last_name
+
+and
+
+full_name
+
+For CV:
+
+I prefer:
+
+Database trigger
+
+because it shows deeper understanding.
+
+Feature 7 — Safety Check in CI
+
+This is the DevOps highlight.
+
+Create a simple SQL checker.
+
+Example:
+
+Bad migration:
+
+DROP COLUMN full_name;
+
+Pipeline fails:
+
+❌ Dangerous migration detected
+
+DROP COLUMN is not allowed
+
+Good migration:
+
+ADD COLUMN first_name;
+
+Pipeline passes:
+
+✅ Migration safe
+Feature 8 — Automated Test
+
+Your pipeline should test:
+
+Scenario:
+
+Start database
+
+↓
+
+Insert data using v1 API
+
+↓
+
+Run migration
+
+↓
+
+Access same data using v2 API
+
+↓
+
+Check no errors
+
+
+Expected:
+
+PASS
+
+Old API works
+New API works
+Data preserved
+
+What NOT to include in MVP
+
+Do NOT waste time on:
+
+❌ Kubernetes
+
+❌ Terraform
+
+❌ AWS deployment
+
+❌ Multi-region database
+
+❌ Replication
+
+❌ Kafka
+
+❌ Huge datasets
+
+❌ Monitoring stack
+
+❌ Advanced migration tools
+
+These are good later, but they dilute the MVP.
